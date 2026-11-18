@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import aiohttp
+
+
+class TelegramError(RuntimeError):
+    pass
+
+
+class Telegram:
+    def __init__(self, token: str, base_url: str, session: aiohttp.ClientSession) -> None:
+        self._root = f"{base_url}/bot{token}"
+        self._session = session
+
+    async def call(self, method: str, payload: dict[str, Any] | None = None) -> Any:
+        async with self._session.post(f"{self._root}/{method}", json=payload or {}) as response:
+            data = await response.json(content_type=None)
+        if not data.get("ok"):
+            raise TelegramError(f"{method}: {data.get('description', 'unknown Telegram error')}")
+        return data.get("result")
+
+    async def get_updates(self, offset: int, timeout: int) -> list[dict[str, Any]]:
+        return await self.call(
+            "getUpdates",
+            {
+                "offset": offset,
+                "timeout": timeout,
+                "allowed_updates": ["message", "callback_query", "inline_query"],
+            },
+        )
+
+    async def send_message(
+        self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return await self.call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+                "reply_markup": reply_markup,
+            },
+        )
+
+    async def edit_message(
+        self, chat_id: int, message_id: int, text: str, reply_markup: dict[str, Any] | None = None
+    ) -> dict[str, Any] | bool:
+        return await self.call(
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+                "reply_markup": reply_markup,
+            },
+        )
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        try:
+            await self.call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+        except TelegramError:
+            pass
+
+    async def answer_callback(self, callback_id: str, text: str | None = None) -> None:
+        await self.call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text})
+
+    async def answer_inline(self, inline_query_id: str, results: list[dict[str, Any]]) -> None:
+        await self.call(
+            "answerInlineQuery",
+            {
+                "inline_query_id": inline_query_id,
+                "results": results,
+                "cache_time": 0,
+                "is_personal": True,
+            },
+        )
+
+    async def send_video(
+        self,
+        chat_id: int,
+        path: Path,
+        caption: str,
+        reply_markup: dict[str, Any],
+    ) -> dict[str, Any]:
+        form = aiohttp.FormData(quote_fields=False)
+        form.add_field("chat_id", str(chat_id))
+        form.add_field("caption", caption)
+        form.add_field("parse_mode", "HTML")
+        form.add_field("supports_streaming", "true")
+        form.add_field("reply_markup", json.dumps(reply_markup, separators=(",", ":")))
+        with path.open("rb") as stream:
+            form.add_field("video", stream, filename=path.name, content_type="video/mp4")
+            async with self._session.post(f"{self._root}/sendVideo", data=form) as response:
+                data = await response.json(content_type=None)
+        if not data.get("ok"):
+            raise TelegramError(f"sendVideo: {data.get('description', 'unknown Telegram error')}")
+        return data["result"]
+

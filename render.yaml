@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mediafetch-bot
+    runtime: docker
+    dockerfilePath: Dockerfile
+    plan: standard
+    healthCheckPath: /health
+    disk:
+      name: mediafetch-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: PUBLIC_ACCESS
+        value: "true"
+      - key: DATA_DIR
+        value: /data
+      - key: MAX_FILE_BYTES
+        value: "49000000"
+      - key: MAX_DURATION_SECONDS
+        value: "2700"
+      - key: MAX_CONCURRENT_DOWNLOADS
+        value: "2"
+      - key: POLL_TIMEOUT
+        value: "45"

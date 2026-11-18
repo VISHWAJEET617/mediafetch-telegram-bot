@@ -1,0 +1,4 @@
+aiohttp==3.14.3
+bgutil-ytdlp-pot-provider==1.3.2
+yt-dlp[default]==2026.8.19
+parth-dl==1.2.1
